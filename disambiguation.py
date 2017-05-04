@@ -1,7 +1,73 @@
 #!/usr/bin/env python2
-
+# -*- coding: utf-8 -*-
 import nltk
 
+
+def zipper_to_list(zipper):
+    (a, b, c) = zipper
+    return a + [b] + c
+
+class Sentence(object):
+    __slots__ = ['nominals', 'elements', 'target', 'target_class']
+    def __init__(self, nominals, words, target, target_class):
+        self.target = target # mot cible(e.g. "interest")
+        self.target_class = target_class # classe du mot cible(i.e. sens)
+        # les groupes nominaux et les mots de la phrase sont organisés en "zipper"
+        # soit des triplets (avant, cible, après), où "cible" est le mot cible ou le groupe nominal le contenant
+        self.nominals = partition_by(nominals, lambda ws: member_by(ws, lambda x: x[0] == target))
+        self.elements = partition_by(words, lambda w: w[0] == target)
+    
+    def words_zipper(self):
+        "zipper contenant uniquement les mots(sans la classe lexicale)"
+        (b, f, a) = self.elements
+        return (map(lambda x:x[0], b), f[0], map(lambda x: x[0], a))
+
+    def words_list(self):
+        return zipper_to_list(self.words_zipper())
+    
+    def pos_zipper(self):
+        "zipper contenant uniquement les classes lexicales"
+        (b, f, a) = self.elements
+        return (map(lambda x:x[1], b), f[1], map(lambda x: x[1], a))
+
+    def pos_list(self):
+        return zipper_to_list(self.pos_zipper())
+    
+    def words_context(self, n):
+        "fenêtre de contexte de taille n des mots alentour du mot cible"
+        (b, f, a) = self.words_zipper()
+        return (b[len(b)-1:], f, a[0:n])
+    
+    def pos_context(self, n):
+        "Fenêtre de contexte de taille n des classes lexicales alentour du mot cible"
+        (b, f, a) = self.pos_zipper()
+        return (b[len(b)-1:], f, a[0:n])
+
+    def __iter__(self):
+        return iter(self.elements)
+
+    def iter_words(self):
+        for (w, _) in zipper_to_list(self.elements):
+            yield w
+
+    def iter_pos(self):
+        for (_, pos) in zipper_to_list(self.elements):
+            yield pos
+
+    def get_tagged_words_string(self):
+        return " ".join(map(lambda w: "{}/{}".format(w[0],w[1]), zipper_to_list(self.elements)))
+
+    def get_words_string(self):
+        return " ".join(self.words_list())
+    
+    def __repr__(self):
+        return "Sentence (class %s) %s"%(str(self.target_class), str(self.elements))
+    
+    def __str__(self):
+        (b, f, a) = self.elements        
+        return "Sentence (class {0}) : {1}".format(self.target_class, self.get_tagged_sentence_string())
+    
+    
 def read_until(of, string="\n"):
     buffer = ""
     stop = False
@@ -22,50 +88,74 @@ def read_string(of, string=""):
             return False
     else:
         return True
+
+def partition_by(seq, pred):
+    for (i, x) in enumerate(seq):
+        if pred(x):
+            return (seq[0:i], x, seq[i+1:])
+    else:
+        (seq, None, [])
+
+def member_by(seq, pred):
+    for x in seq:
+        if pred(x):
+            return True
+    else:
+        return False
+       
     
 def iter_sentences(of):
     sentence = read_until(of, string="$$\n")
     while len(sentence) > 0:
-        yield sentence.rstrip("$$\n")
+        yield sentence.lstrip("=").rstrip("$$\n")
         sentence = read_until(of, string="$$\n")
 
-def parse_nominal(sentence):    
-    if sentence[0] != "[":
-        return ("", sentence)
-    else:
-        index = sentence.index("]")
-        nom = sentence[0:index+1]
-        return (nom[1:-1].strip(" ").split(" "), sentence[index+1:].lstrip(" "))
         
-def parse_token(sentence):
-    (token, _, rest) = sentence.partition(" ")
-    return (token, rest)
-    
-def parse_sentence(str):
+def parse_word(string, target):
+    (word, _, pos) = string.partition("/")
+    if word.startswith(target):
+        (_, _, target_class) = word.partition("_")
+        return (target, pos, target_class)
+    else:
+        return (word, pos, None)
+
+
+def parse_words(rem, target):
+    rem = rem.strip(" ")
+    while len(rem) > 0:
+        (word, _, rem) = rem.partition(" ")        
+        yield parse_word(word, target)
+
+
+def parse_sentence(sentence, target):
     nominals = []
     words = []
-    current = str
-    while len(current) > 0:
-        if current[0] == "[":
-            (nom, current) = parse_nominal(current)
+    target_class = None
+    rem = sentence
+    while len(rem) > 0:
+        rem = rem.strip(" ")
+        if rem[0] == "[":
+            (nom_str, _, rem) = rem[1:].partition("]")            
+            nom = []
+            for (w, pos, tc) in parse_words(nom_str, target):
+                nom.append((w,pos))
+                target_class = target_class or tc
             nominals.append(nom)
             words.extend(nom)
         else:
-            (tok, current) = parse_token(current)
-            words.append(tok)
-        
-    return {"nominals": nominals, "words": words}
-        
-        
+            (tok, _, rem) = rem.partition(" ")
+            (word, pos, tc) = parse_word(tok, target)
+            target_class = target_class or tc
+            words.append((word, pos))
+    return Sentence(nominals, words, target, target_class)
+
 if __name__ == "__main__":
     import sys
     print(sys.argv)
     with open(sys.argv[1], mode="r") as tagged_sentences:
         sentences = iter_sentences(tagged_sentences)
-        s1 = next(sentences)
-        print(s1)
-        for (key, val) in parse_sentence(s1).items():
-            print("%s : %s\n"%(key, val))
+        for (i, s) in enumerate(sentences):
+            print "{}: {}".format(i,parse_sentence(s, "interest").get_words_string())
 
         
     
