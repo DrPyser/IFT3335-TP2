@@ -33,15 +33,15 @@ class Sentence(object):
     def pos_list(self):
         return zipper_to_list(self.pos_zipper())
     
-    def words_context(self, n):
+    def word_context(self, n):
         "fenêtre de contexte de taille n des mots alentour du mot cible"
         (b, f, a) = self.words_zipper()
-        return (b[len(b)-1:], f, a[0:n])
+        return ([b[len(b)-i] if i <= len(b) else None for i in range(n,0, -1)], [a[i] if i < len(a) else None for i in range(n)])
     
     def pos_context(self, n):
         "Fenêtre de contexte de taille n des classes lexicales alentour du mot cible"
         (b, f, a) = self.pos_zipper()
-        return (b[len(b)-1:], f, a[0:n])
+        return ([b[len(b)-i] if i <= len(b) else None for i in range(n,0, -1)], [a[i] if i < len(a) else None for i in range(n)])
 
     def __iter__(self):
         return iter(self.elements)
@@ -149,13 +149,39 @@ def parse_sentence(sentence, target):
             words.append((word, pos))
     return Sentence(nominals, words, target, target_class)
 
+def generate_context_arff(file_name, sentences, context_type, context_size):
+    relation = "{}-{}-context".format(context_size, context_type)
+    attributes = ([("pred-{}".format(i), "string") for i in range(context_size, 0, -1)] +
+                  [("succ-{}".format(i), "string") for i in range(1, context_size+1)] + [("class", "string")])
+    context_generators = {
+        "pos": Sentence.pos_context,
+        "word": Sentence.word_context
+    }
+    cg = context_generators[context_type]
+    with open(file_name, mode="w") as output:
+        output.write("@relation "+relation+"\n")
+        output.write("\n")
+        for (a, t) in attributes:
+            output.write("@attribute {} {}\n".format(a,t))
+        output.write("\n")
+        output.write("@data\n")
+        for s in sentences:
+            (pred, succ) = cg(s, context_size)
+            for x in (pred+succ):
+                output.write("'{}',".format(x) if x else "?,")
+            output.write(s.target_class+"\n")
+
+
 if __name__ == "__main__":
     import sys
     print(sys.argv)
     with open(sys.argv[1], mode="r") as tagged_sentences:
-        sentences = iter_sentences(tagged_sentences)
-        for (i, s) in enumerate(sentences):
-            print "{}: {}".format(i,parse_sentence(s, "interest").get_words_string())
+        sentences = map(lambda s:parse_sentence(s, "interest"), iter_sentences(tagged_sentences))
+        # for s in sentences:
+        #     print(s.word_context(2))
+        for i in range(5):
+            generate_context_arff("{}-pos-context.arff".format(i+1), sentences, "pos", i+1)
+            generate_context_arff("{}-word-context.arff".format(i+1), sentences, "word", i+1)
 
         
     
