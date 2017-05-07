@@ -107,7 +107,7 @@ def member_by(seq, pred):
 def iter_sentences(of):
     sentence = read_until(of, string="$$\n")
     while len(sentence) > 0:
-        yield sentence.lstrip("=").rstrip("$$\n")
+        yield sentence.rstrip("$$\n")
         sentence = read_until(of, string="$$\n")
 
         
@@ -151,8 +151,8 @@ def parse_sentence(sentence, target):
 
 def generate_context_arff(file_name, sentences, context_type, context_size):
     relation = "{}-{}-context".format(context_size, context_type)
-    attributes = ([("pred-{}".format(i), "string") for i in range(context_size, 0, -1)] +
-                  [("succ-{}".format(i), "string") for i in range(1, context_size+1)] + [("class", "string")])
+    attributes = ([("pred-{}".format(i), "STRING") for i in range(context_size, 0, -1)] +
+                  [("succ-{}".format(i), "STRING") for i in range(1, context_size+1)] + [("class", "STRING")])
     context_generators = {
         "pos": Sentence.pos_context,
         "word": Sentence.word_context
@@ -168,8 +168,8 @@ def generate_context_arff(file_name, sentences, context_type, context_size):
         for s in sentences:
             (pred, succ) = cg(s, context_size)
             for x in (pred+succ):
-                output.write("'{}',".format(x) if x else "?,")
-            output.write(s.target_class+"\n")
+                output.write("'{}',".format(x.replace("'", "\\'")) if x else "?,")
+            output.write("'{}'".format(s.target_class)+"\n")
 
 
 if __name__ == "__main__":
