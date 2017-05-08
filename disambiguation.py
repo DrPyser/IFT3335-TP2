@@ -179,9 +179,9 @@ if __name__ == "__main__":
         sentences = map(lambda s:parse_sentence(s, "interest"), iter_sentences(tagged_sentences))
         # for s in sentences:
         #     print(s.word_context(2))
-        for i in range(5):
-            generate_context_arff("{}-pos-context.arff".format(i+1), sentences, "pos", i+1)
-            generate_context_arff("{}-word-context.arff".format(i+1), sentences, "word", i+1)
+        for i in range(10):
+            generate_context_arff("training-set/{}-pos-context.arff".format(i+1), sentences, "pos", i+1)
+            generate_context_arff("training-set/{}-word-context.arff".format(i+1), sentences, "word", i+1)
 
         
     
