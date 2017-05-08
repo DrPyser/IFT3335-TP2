@@ -19,7 +19,9 @@
 \begin{document}
 \maketitle
 
-\section{Expérience}
+\section { Classification de textes }
+
+\subsection{Expérience}
 
 Les algorithmes d'apprentissage qui ont été testés sont NaiveBayes, J48 (arbre de décision), SMO (une implémentation des machines à vecteurs de support) et trois réseaux de neurones (abrégé en "MLP" pour "MultiLayer Perceptron") à une couche cachée contenant 5, 10 et 30 neurones respectivement. Pour tous les algorithmes, les paramètres par défaut de Weka ont été utilisés.
 
@@ -90,5 +92,148 @@ Les résultats des réseaux de neurones sont meilleurs que ceux de J48, mais en 
 
 Le stemming semble donner une classification légèrement moins bonne en général, sauf lorsque le nombre d'attributs était de 100. On pourrait donc émettre l'hypothèse que le stemming est plus efficace lorsque le nombre d'attributs est très faibles.
 
+\section{ Disambiguisation }
+\subsection{ Extraction des caractéristiques }
+Un programme python s'occupe de parser les données textuelles brutes: un fichier contenant des phrases pour lesquelles 
+les groupes nominaux ainsi que la classe lexicale(POS -- \emph{Part Of Speech}) de chaque mot sont indiqués explicitement.
+Ces phrases contiennent tous le mot cible, ``interest'', annoté de son sens particulier(un chiffre de 1 à 6).
+Ces phrases sont transformées en objets Python contenant les mots annotés
+(représentés par des paires \texttt{(mot, classe lexicale)}), les groupes nominaux de la phrase, le mot cible et sa classe. 
+Pour faciliter la génération des fenêtres de contexte utilisées pour la classification, 
+les mots et les groupes nominaux sont organisés en "zippers", 
+soit des triplets de forme \texttt{(mots précédants, mot cible, mots suivants)},
+ou pour les groupes nominaux \texttt{(groupes précédants, groupe contenant le mot cible, groupes suivants)}. 
+Cette représentation permet de facilement et efficacement obtenir des contextes de différentes tailles autour du mot cible.
+Une fois le fichier lu, parsé et chaque phrase transformée en cette représentation,
+on génère ensuite pour chaque phrase des fenêtres de contexte de différentes tailles, 
+pour les mots ainsi que pour les classes lexicales.
+Ici, on s'est limitée à des tailles entre 1 et 5(une taille de 1 signifie une fenêtre de contexte contenant un mot précédant et un mot suivant le mot cible).
+aOn génère ensuite des fichiers \texttt{.arff} (\emph{attribute-relation file format}) pour chaque taille et type de fenêtre de contexte.
+Les attributs du fichier correspondent aux mots précédants et aux mots suivants dans la fenêtre de contexte, ainsi que la classe(la signification du mot cible). Par exemple, pour une fenêtre de taille 1, on a trois attributs: ``pred-1'', ``succ-1'' et ``class'', chacun de type ``string''.
+Lorsque la taille de la fenêtre est plus grande que le nombre de mots entourant le mot cible
+(e.g. une phrase possède moins de $n$ mots suivant ou précédant le mot cible, pour une fenêtre de contexte de taille $n$),  
+un point d'intérogation \texttt{?} signifiant une donnée manquante est générée pour ces colonnes dans le fichier \texttt{.arff}.
+
+On obtient donc 10 fichiers qui serviront d'ensembles d'entrainement pour la classification.
+
+\subsection{ Expériences }
+\subsubsection{ Prétraitement }
+Avant de pouvoir effectuer la classification avec les différents algorithmes, certaines manipulations des données d'entrainement sont nécessaires.
+La première étape de ce prétraitement est de transformer les attributs de type ``string'' en attributs de type ``nominal''. 
+Ainsi, le type de chaque attribut devient une énumération des valeurs possibles pour cet attribut(selon les données de cet ensemble d'entrainement).
+Le type de la classe devient un type nominal \texttt{\{ 1, 2, 3, 4, 5, 6 \}}.
+Le type des autres attributs devient une énumération des mots ou des classes lexicales possibles.
+On utilise le filtre Weka `weka.filters.unsupervised.attribute.StringToNominal` pour cette tâche.
+
+Ce prétraitement est suffisant pour les algorithmes ``NaiveBayes'', ``J48'', et ``SMO''.
+Ces algorithmes sont exécutés avec leur paramètres par défaut tel que suggérés par l'application ``Explorer'' de WEKA.
+Voici les commandes utilisés pour l'exécution:
+\begin{verbatim}
+  weka.classifiers.functions.SMO -C 1.0 -L 0.001 -P 1.0E-12 -N 0 -V -1 -W 1 
+    -K "weka.classifiers.functions.supportVector.PolyKernel -C 250007 -E 1.0" 
+    -c "last" -t training_set_file 
+    
+  weka.classifiers.trees.J48 -c "last" -t training_set_file 
+  weka.classifiers.bayes.NaiveBayes -c "last" -t training_set_file
+\end{verbatim}
+
+Pour les ``MultilayerPerceptron'' avec 5, 10 ou 30 noeuds cachées, on effectue des prétraitements suplémentaires.
+D'abord, on transforme les attributs nominaux en attributs binaires(type ``numeric'' avec comme seules valeurs 1 ou 0).
+Ainsi, un attribut $a$ ayant comme valeurs possibles $v_1$ à $v_n$ devient $n$ attributs $a_1$ à $a_n$ ayant chacun comme valeur 1 ou 0, 
+indiquant si l'attribut $a$ prend la valeur $v_i$ pour cette rangée.
+Cette transformation est faite automatiquement par l'algorithme de classification, mais le faire à l'étape de prétraitement
+permet de présélectionner un sous-ensemble de ces attributs binaires, en fonction de leurs intérêt pour la classification, ce qui permet
+un temps d'entrainement raisonnable et une meilleur précision potentielle(en limitant le bruit).
+On utilise donc le filtre WEKA \\
+\texttt{weka.filters.supervised.attribute.AttributeSelection} \\
+avec comme fonction d'évaluation le gain d'information et comme sélecteur \\
+\texttt{weka.attributeSelection.Ranker}. \\
+On sélectionne un maximum de 100 attributs(les 100 meilleurs attributs du point de vue du gain d'information) pour la classification utilisant
+l'algorithme ``MultilayerPerceptron''.
+
+\subsection{ Analyse des résultats }
+\begin{table}[]
+\centering
+\caption{Performances de la classification pour la disambiguisation}
+\label{table-disambiguation}
+\begin{tabular}{llll}
+Algorithm  & Taille de fenêtre & Contexte mot    & Contexte POS     \\
+nb    & 1    & 84.8818 & 71.6216 \\
+nb    & 2    & 86.4865 & 75.5912 \\
+nb    & 3    & 87.0355 & 75.5912 \\
+nb    & 4    & 86.5709 & 75.5068 \\
+nb    & 5    & 86.3176 & 75.4645 \\
+SMO   & 1    & 86.3598 & 71.875  \\
+SMO   & 2    & 88.9358 & 76.8581 \\
+SMO   & 3    & 88.3024 & 77.576  \\
+SMO   & 4    & 88.3024 & 76.8159 \\
+SMO   & 5    & 87.5422 & 77.6182 \\
+J48   & 1    & 82.6014 & 72.7196 \\
+J48   & 2    & 82.897  & 72.2973 \\
+J48   & 3    & 82.897  & 72.5929 \\
+J48   & 4    & 82.897  & 73.0997 \\
+J48   & 5    & 82.897  & 73.1841 \\
+mlp5  & 1    & 82.3902 & 72.5507 \\
+mlp5  & 2    & 82.2635 & 74.5355 \\
+mlp5  & 3    & 81.1655 & 75.2956 \\
+mlp5  & 4    & 81.6301 & 75.0845 \\
+mlp5  & 5    & 80.4899 & 73.902  \\
+mlp10 & 1    & 82.3057 & 73.1841 \\
+mlp10 & 2    & 83.1081 & 74.3243 \\
+mlp10 & 3    & 81.3345 & 74.9578 \\
+mlp10 & 4    & 81.4611 & 74.8311 \\
+mlp10 & 5    & 80.9966 & 74.9155 \\
+mlp30 & 1    & 82.6858 & 73.2264 \\
+mlp30 & 2    & 81.7145 & 74.5355 \\
+mlp30 & 3    & 82.2213 & 75.3378 \\
+mlp30 & 4    & 82.4747 & 75.3801 \\
+mlp30 & 5    & 80.1943 & 74.1554
+\end{tabular}
+\end{table}
+
+\subsubsection{ Description de la table de données }
+La colonne "Algorithme" indique l'algorithme utilisée pour la classification.
+``nb'' correspond à l'algorithme ``Naive Bayes'', ``SMO'' correspond à l'algorithme ``SVM'' de WEKA, ``J48'' correspond à un algorithme d'arbre de décision de WEKA, et ``mlp5'', ``mlp10'', ``mlp30'' correspondent aux algorithmes de réseau de neurones(``MultilayerPerceptron'' dans WEKA), avec 5, 10 et 30 noeuds cachées respectivement.
+La colonne ``Taille de fenêtre'' indique la taille de la fenêtre de contexte.
+Une fenêtre de taille 5 contient les 5 mots ou catégories lexicales précédent
+et les 5 mots ou catégories lexicales suivant le mot cible dans une phrase.
+Les colonnes ``Contexte mot'' et ``Contexte POS'' contiennent le résultat des algorithmes en terme de pourcentage de réussite(classification correcte), pour les deux types de contexte(POS = \emph{Part Of Speech}).
+
+\subsubsection{ Type de contexte }
+Le premier motif remarquable dans ces données est la différence entre les contextes de mot et les contextes de classe lexicale(POS).
+Les contextes de mots sont invariablement mieux que les contextes POS, pour tout algorithme et toutes tailles de fenêtre confondus.
+Cette différence est la plus significative avec l'algorithme "SMO" et une taille de fenêtre de 1, 
+avec une différence pourcentage de réussite de 14.5(86.4\% contre 71.9\%).
+
+\subsubsection {Comparaison des algorithmes}
+
+Le meilleur pourcentage de réussite pour l'algorithme *Naive Bayes* est de 87.04\% pour le contexte de mot et de 75.59\% pour le contexte POS.
+Le meilleur pourcentage de réussite pour l'algorithme *J48* est de 82.9\% pour le contexte de mot et de 73.18\% pour le contexte POS.
+Le meilleur pourcentage de réussite pour l'algorithme *SMO* est de 88.94\% pour le contexte de mot et de 77.86\% pour le contexte POS.
+Le meilleur pourcentage de réussite pour l'algorithme *MultilayerPerceptron* avec 5 couches cachés est de 82.29\% pour le contexte de mot et de 75.3\% pour le contexte POS.
+Le meilleur pourcentage de réussite pour l'algorithme *MultilayerPerceptron* avec 10 couches cachés est de 83.11\% pour le contexte de mot et de 74.96\% pour le contexte POS.
+Le meilleur pourcentage de réussite pour l'algorithme *MultilayerPerceptron* avec 30 couches cachés est de 82.69\% pour le contexte de mot et de 75.38\% pour le contexte POS.
+L'algorithme ayant le meilleur pourcentage de réussite pour ces ensembles d'entrainements est le *SMO* avec 88.94\% pour un contexte de mot et une taille de fenêtre de 2.
+C'est aussi l'algorithme *SMO* qui a le meilleur pourcentage de réussite avec les contextes POS, avec 77.6\% pour une taille de fenêtre de 5.
+
+\subsubsection{Impact de la taille du contexte}
+
+Cinq tailles de contextes, de 1 à 5, ont été utilisées pour l'entrainement. 
+
+L'impact de la taille de fenêtre est différent selon l'algorithme considéré et le type de contexte utilisé(mot vs. POS).
+Pour l'algorithme *Naive Bayes*, la meilleur performance est atteinte avec une fenêtre de taille 3 pour un contexte de mots(87\%) et une taille 2 ou 3 pour le contexte POS.
+Pour l'algorithme *J48*, la meilleur performance est atteinte avec une fenêtre de taille 3 pour un contexte de mots(87\%) et une taille 2 ou 3 pour le contexte POS.
+Pour l'algorithme *SMO*, la meilleur performance est atteinte avec une fenêtre de taille 3 pour un contexte de mots(87\%) et une taille 2 ou 3 pour le contexte POS.
+Pour l'algorithme *MultilayerPerceptron* à 5 couches, la meilleur performance est atteinte avec une fenêtre de taille 3 pour un contexte de mots(87\%) et une taille 2 ou 3 pour le contexte POS.
+Pour l'algorithme *MultilayerPerceptron* à 10 couches, la meilleur performance est atteinte avec une fenêtre de taille 3 pour un contexte de mots(87\%) et une taille 2 ou 3 pour le contexte POS.
+Pour l'algorithme *MultilayerPerceptron* à 30 couches, la meilleur performance est atteinte avec une fenêtre de taille 3 pour un contexte de mots(87\%) et une taille 2 ou 3 pour le contexte POS.
+
+Il ne semble pas y avoir de corrélation globale claire entre la taille de la fenêtre et la performance. 
+Ce qui est évident, c'est qu'une fenêtre de contexte plus grande ne signifie pas une meilleur performance, 
+peu importe l'algorithme ou le type de contexte utilisé. 
+L'algorithme "J48"(arbre de décision) est largement insensible à la taille pour le contexte de mot. 
+La meilleur performance est atteinte avec une taille de 2 et est maintenu pour des tailles de 3, 4 ou 5.
+Pour les algorithmes de réseaux de neurones, les meilleurs performances sont atteintes pour les contextes de mot avec les plus petites tailles(1 ou 2) et les pires performances avec les plus grande tailles(5).
+Cette corrélation n'est pas partagée par les contextes POS.
 
 \end{document}
