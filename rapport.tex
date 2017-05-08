@@ -1,0 +1,94 @@
+% !TEX TS-program = pdflatex
+% !TEX encoding = UTF-8 Unicode
+
+% This is a simple template for a LaTeX document using the "article" class.
+% See "book", "report", "letter" for other types of document.
+
+\documentclass[11pt]{article} % use larger type; default would be 10pt
+
+\usepackage[utf8]{inputenc} % set input encoding (not needed with XeLaTeX)
+\usepackage{graphicx}
+
+\title{Intelligence artificielle - Rapport}
+\author{Yan Coutu et Charles Langlois}
+\date{8 mai 2017}
+
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{1cm}
+
+\begin{document}
+\maketitle
+
+\section{Expérience}
+
+Les algorithmes d'apprentissage qui ont été testés sont NaiveBayes, J48 (arbre de décision), SMO (une implémentation des machines à vecteurs de support) et trois réseaux de neurones (abrégé en "MLP" pour "MultiLayer Perceptron") à une couche cachée contenant 5, 10 et 30 neurones respectivement. Pour tous les algorithmes, les paramètres par défaut de Weka ont été utilisés.
+
+Deux ensembles de jetons ont été générés : l'un sans stemming et l'autre avec stemming. L'ensemble de jetons sans stemming a été généré en appliquant le filtre "StringToWordVector" avec les paramètres suivants :
+
+\begin{itemize}
+\item IDFTransform : True
+\item TFTransform : True
+\item attributeIndices: last-first
+\item lowerCaseTokens : True
+\item outputWordCounts : True
+\item tokenizer : les caractères "/-\_\textless\textgreater\&\#" ont été ajoutés à la liste de délimiteurs
+\item wordsToKeep : 100000
+\end{itemize}
+
+où les autres paramètres n'ont pas été modifiés. L'ensemble de jetons avec stemming a été créé avec les mêmes paramètres, mais en modifiant en plus le paramètre "stemmer" pour "snowballStemmer".
+
+De plus, des tests ont été effectués avec des ensembles de jetons plus petits sélectionnés grâce au filtre "AttributeSelection" avec le paramètre "evaluator" à "InfoGainAttributeEval" et le paramètre "search" à "Ranker". Ces ensembles de jetons générés étaient de taille 100, 250, 500, 750, 1000, 2500, 5000, 7500 et 10000. Notons que certains algorithmes ont seulement été testés sur des ensembles réduits dû au temps de calcul trop long sur des ensembles de plus grande taille :  J48 n'a été testé que sur des ensembles de taille inférieur ou égale à 1000, et les trois réseaux de neurones ont été testés sur les ensembles de tailles 100 et 250.
+
+Pour comparer les performances selon les différents paramètres, les résultats ont été obtenus à l'aide d'une validation croisée à 10 plis. L'analyse se fera de prime abord sur la proportion d'éléments prédits correctement sur l'ensemble des données, complémentée par une analyse par classe.
+
+\newpage
+\section{Résultats et analyse}
+
+\begin{table}[ht]
+\resizebox{\textwidth}{!}{
+\begin{tabular}{|r|llllllllll|}
+\hline
+ & 100 & 250 & 500 & 750 & 1000 & 2500 & 5000 & 7500 & 10000 & Tout \\
+\hline
+NaiveBayes & 72.8365 & 78.5487 & 84.3344 & 85.3886 & 86.4428 & 86.9821 & 86.9331 & 86.9576 & 86.8105 & 86.6879 \\
+J48 & 87.1537 & 88.4040 & 88.6001 & 88.6492 & 88.4776 &&&&&\\
+SMO & 90.4633 & 93.7485 & 94.4839 & 94.2878 & 94.6801 & 94.6801 & 94.6556 & 94.3368 & 94.5575 & 93.8956 \\
+MLP (5) & 89.4582 & 93.0620 &&&&&&&&\\
+MLP (10) & 89.5072 & 91.4930 &&&&&&&&\\
+MLP (30) & 89.1640 & 91.6646 &&&&&&&&\\
+\hline
+\end{tabular}}
+\caption{Pourcentage de réussite selon l'algorithme et le nombre d'attributs considérés (Sans stemming)}
+\end{table}
+
+\begin{table}[ht]
+\resizebox{\textwidth}{!}{
+\begin{tabular}{|r|llllllllll|}
+\hline
+ & 100 & 250 & 500 & 750 & 1000 & 2500 & 5000 & 7500 & 10000 & Tout \\
+\hline
+NaiveBayes & 74.3810 & 77.7151 & 83.3783 & 84.1138 & 84.7512 & 85.4131 & 85.2660 & 85.0454 & 84.7021 & 84.7021 \\
+J48 & 88.4531 & 88.7472 & 88.7472 & 88.7963 & 88.7963 &&&&&\\
+SMO & 91.6156 & 93.5033 & 94.0917 & 94.2388 & 94.3123 & 94.5330 & 94.0427 & 94.0181 & 94.2633 & 94.2878 \\
+MLP (5) & 89.6543 & 91.7137 &&&&&&&&\\
+MLP (10) & 89.8750 & 91.3214 &&&&&&&&\\
+MLP (30) & 90.3653 & 90.5124 &&&&&&&&\\
+\hline
+\end{tabular}}
+\caption{Pourcentage de réussite selon l'algorithme et le nombre d'attributs considérés (Avec stemming)}
+\end{table}
+
+De manière générale, comme la classification est pondérée, on observe que plus la classe est grande, mieux les éléments sont classés. Les algorithmes d'apprentissage ont donc beaucoup de difficulté à apprendre des classes de taille très petites, comme "pos-heat" et "pos-housing" dans notre cas, par rapport à la taille de l'ensemble de données.
+
+NaiveBayes donne les résultats les moins bons de tous les algorithmes testés, se situant entre 86.5\% et 87\% dans les meilleurs des cas sans stemming, et entre 85\% et 85.5\% avec stemming. En fait, le meilleur résultat de NaiveBayes est plus petite que le pire résultat de tous les autres algorithmes. On observe aussi que considérer tous les attributs possibles ne donne pas les meilleurs résultats possibles. En effet, on semble obtenir une meilleur performance si on ne considère qu'entre 2500 et 7500 attributs. Enfin, on remarque aussi que moins il y a d'attributs, plus l'algorithme va prédire souvent les classes de petites tailles, mais presque jamais correctement.
+
+L'algorithme J48, générant l'arbre de décision, est plus lent que NaiveBayes. Par contre, il a l'avantage de donner de meilleurs résultats de classification. De plus, l'arbre de décision évalue plus rapidement la classe d'un élément donné que NaiveBayes. On remarque que pour les différents nombres d'attributs testés sauf 100, la proportion d'éléments bien classés semble assez constante. On peut aussi voir que les petites classes sont mieux prédites que par NaiveBayes (57\% pour "pos-housing" et 75\% pour "pos-heat").
+
+SMO est l'algorithme qui donnait de meilleurs résultats et qui était, en plus, le plus rapide d'exécution. Même ses pires résultats rivalisent avec les meilleurs résultats des autres algorithmes. Comme pour NaiveBayes, considérer tous les attributs n'est pas la meilleur option. Les meilleurs résultats semblent être obtenus entre 1000 et 5000 attributs. En outre, pour les petites classes, l'algorithme est étrangement efficace sur "pos-heat", qui ne contient que 4 éléments, mais pas pour "pos-housing", qui n'en contient que 7.
+
+Les résultats des réseaux de neurones sont meilleurs que ceux de J48, mais en général plus faible que SMO. De plus, le temps de calcul pour l'apprentissage est très grand. On remarque aussi que le nombre de neurones dans la couche cachée semble peu influencer la qualité de la classification : les résultats sont en général très similaires peu importe le nombre de neurones. Une exception particulière semble être le réseau à une couche cachée de 5 neurones sur 250 attributs sans stemming, qui donne des résultats largement supérieurs que les autres réseaux de neurones.
+
+Le stemming semble donner une classification légèrement moins bonne en général, sauf lorsque le nombre d'attributs était de 100. On pourrait donc émettre l'hypothèse que le stemming est plus efficace lorsque le nombre d'attributs est très faibles.
+
+
+\end{document}
